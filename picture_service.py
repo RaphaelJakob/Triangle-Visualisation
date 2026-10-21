@@ -67,17 +67,16 @@ def prepare_photo(photo_path: str, folder: str) -> str:
     if MAX_SIDE is None or max(width, height) <= MAX_SIDE:
         return photo_path
     image = importimage(photo_path).convert("RGB")
-    image.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
+    image.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
     small_path = os.path.join(folder, "photo_small.png")
     image.save(small_path, compress_level=1)   # lossless; low compression is faster to write
     return small_path
 
 
 def make_picture(photo_bytes: bytes | None, seed: int | None = None,
-                 starting_count=DEFAULTS["starting_count"], weighting_power=DEFAULTS["weighting_power"],
-                 evenness=DEFAULTS["evenness"], spread=DEFAULTS["spread"],
-                 split_chance=DEFAULTS["split_chance"],
-                 borrow_chance=DEFAULTS["borrow_chance"]) -> tuple[bytes, int]:
+                 starting_count: int = 120, weighting_power: float = 2.0,
+                 evenness: float = 0.2, spread: float = 0.2,
+                 split_chance: float = 0.7, borrow_chance: float = 0.3) -> tuple[bytes, int]:
     """
     Takes the uploaded photo's bytes, a seed (None means pick a random one) and the six
     settings. It writes the photo to a temporary folder, shrinks it if it is big, waits for a
