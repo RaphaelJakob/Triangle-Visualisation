@@ -102,9 +102,9 @@ The code is on GitHub as RaphaelJakob/Triangle-Visualisation, on the `main` bran
 
 ## How I built it
 
-I wrote the core of the project myself while learning NumPy along the way. This includes loading the photo and fixing its rotation, the greyscale and Sobel edge steps, the edge-weighted point picking, adding the corners, the Delaunay triangulation, the brightness-median colours, the matplotlib view, and the whole recursion (`triangle_split`, `coin_split` and `recursion_driver`). The design decisions listed above are also mine.
+I wrote the core of the project myself while learning NumPy along the way. This includes loading the photo and fixing its rotation, the greyscale and Sobel edge steps, the edge-weighted point picking, adding the corners, the Delaunay triangulation, the brightness-median colours, the matplotlib view, and the whole recursion (`triangle_split`, `coin_split` and `recursion_driver`) and many other small points. The design decisions, ideas, direction and creative side listed above are also entirely mine.
 
-Once the core worked, I used Claude, an AI assistant made by Anthropic, to help finish the project. Claude wrote `triangles_to_image`, the fallback colour for empty triangles, `borrow_colour`, the exact version of `triangle_label_array` that fixed the hairlines, the master function `make_triangle_art`, the bending functions, the Streamlit web app and the tests, and helped me decide how to host the app. I reviewed and ran this code, and I am working through each part so that I can explain every line myself.
+Once the core worked, I used Claude, an AI assistant made by Anthropic, to help finish the project. Claude updated `triangles_to_image`, made the fallback colour for empty triangles, `borrow_colour`, update the exact version of `triangle_label_array` to fix the hairlines, assisted with the master function `make_triangle_art`,created the bending functions, the Streamlit web app and the tests, and helped me decide how to host the app. I reviewed and ran this code, and I am working through each part so that I can explain every line myself.
 
 ## Credits
 
