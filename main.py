@@ -328,6 +328,103 @@ def borrow_colour(triangle_colours, original_image_array, rng, borrow_chance=0.3
     new_colours[borrows] = original_image_array[rows[borrows], columns[borrows]]
     return new_colours
 
+def bend_offsets(image_shape: tuple[int, int], curve_strength: float, curve_smoothness: float,
+                 rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, float]:
+    """
+    Takes the image shape as rows and columns, a bend strength and a smoothness (both as shares
+    of the image's longer side) and a random generator. It makes two smooth noise fields with a
+    Gaussian blur, scales them to the strength, fades them to 0 near the picture's edges, and
+    shrinks them if needed so the warp never folds (the smallest Jacobian determinant stays at
+    0.05 or more). Returns the column offsets, the row offsets and the scale that was used (1.0
+    when nothing had to shrink).
+    """
+    rows, columns = image_shape
+    longer = max(rows, columns)
+    blur = max(curve_smoothness * longer, 1.0)
+    fade_width = max(min(2 * blur, 0.10 * min(rows, columns)), 1.0)
+
+    def ramp(length):
+        # 0 at both ends, easing up to 1 over fade_width pixels (smoothstep, so no sharp corner)
+        position = np.minimum(np.arange(length), np.arange(length)[::-1]) / fade_width
+        position = np.clip(position, 0, 1)
+        return position * position * (3 - 2 * position)
+
+    fade = (ramp(rows)[:, None] * ramp(columns)[None, :]).astype(np.float32)
+    # The noise is blurred at a smaller size and then stretched back up. The bends are smooth, so
+    # this looks the same but is much faster than blurring the full-size noise.
+    shrink = max(1, int(blur // 8))
+    small_shape = (-(-rows // shrink), -(-columns // shrink))
+    at_rows = (np.arange(rows, dtype=np.float32) + 0.5) / shrink - 0.5
+    at_columns = (np.arange(columns, dtype=np.float32) + 0.5) / shrink - 0.5
+    grid_r, grid_c = np.meshgrid(at_rows, at_columns, indexing="ij")
+    offsets = []
+    for _ in range(2):
+        small = ndimage.gaussian_filter(rng.standard_normal(small_shape, dtype=np.float32), blur / shrink)
+        noise = ndimage.map_coordinates(small, [grid_r, grid_c], order=3, mode="nearest")   # cubic, so the bends have no kinks
+        spread = float(noise.std())
+        noise = noise / spread if spread > 0 else noise
+        offsets.append(noise * (curve_strength * longer) * fade)
+    column_offsets, row_offsets = offsets
+    # The warp folds where the Jacobian determinant of (x + dx, y + dy) drops to 0 or below.
+    dx_drow, dx_dcol = np.gradient(column_offsets)
+    dy_drow, dy_dcol = np.gradient(row_offsets)
+
+    def smallest_determinant(scale):
+        return float(((1 + scale * dx_dcol) * (1 + scale * dy_drow)
+                      - (scale * dx_drow) * (scale * dy_dcol)).min())
+
+    scale = 1.0
+    if smallest_determinant(1.0) < 0.05:
+        low, high = 0.0, 1.0
+        for _ in range(30):
+            middle = (low + high) / 2
+            if smallest_determinant(middle) >= 0.05:
+                low = middle
+            else:
+                high = middle
+        scale = low
+    return column_offsets * scale, row_offsets * scale, scale
+
+def bent_triangles_to_image(triangle_corner_points: np.ndarray,
+                            triangle_colours: np.ndarray,
+                            image_shape: tuple[int, int],
+                            column_offsets: np.ndarray,
+                            row_offsets: np.ndarray,
+                            output_path: str | None = None) -> Image.Image:
+    """
+    Takes the triangle corner points, their colours, the image shape as rows and columns and the
+    two offset fields from bend_offsets. It builds the triangle label array at twice the size,
+    looks up each sub-pixel's triangle at its bent position, colours it, and shrinks every 2 x 2
+    block back to one pixel so the curved edges come out smooth. Saves the picture if a path is
+    given and returns it as a Pillow image the same size as the photo.
+    """
+    rows, columns = image_shape
+    # Pixel j of the 2x grid sits at 1x position (j - 0.5) / 2, so the triangles scale by 2, plus 0.5.
+    fine_labels = triangle_label_array(triangle_corner_points * 2 + 0.5, (rows * 2, columns * 2))
+    lookup = np.vstack([[0, 0, 0], triangle_colours]).astype(np.uint8)
+    picture = np.empty((rows, columns, 3), dtype=np.uint8)
+    fine_columns = np.arange(columns * 2, dtype=np.float32)
+    strip = 256   # rows of the final picture handled at a time, to keep memory low
+    for top in range(0, rows, strip):
+        bottom = min(top + strip, rows)
+        fine_rows = np.arange(top * 2, bottom * 2, dtype=np.float32)
+        grid_r, grid_c = np.meshgrid(fine_rows, fine_columns, indexing="ij")
+        at_r, at_c = (grid_r - 0.5) / 2, (grid_c - 0.5) / 2
+        shift_c = ndimage.map_coordinates(column_offsets, [at_r, at_c], order=1, mode="nearest")
+        shift_r = ndimage.map_coordinates(row_offsets, [at_r, at_c], order=1, mode="nearest")
+        # The outer ring of 2x sub-pixels lies half a pixel outside the triangles, so lookups stay
+        # one sub-pixel inside the edge.
+        look_r = np.clip(grid_r + 2 * shift_r, 1, rows * 2 - 2)
+        look_c = np.clip(grid_c + 2 * shift_c, 1, columns * 2 - 2)
+        ids = np.asarray(ndimage.map_coordinates(fine_labels, [look_r, look_c], order=0,
+                                                 mode="nearest")).astype(np.int64)
+        fine_strip = Image.fromarray(lookup[ids], "RGB")
+        picture[top:bottom] = np.asarray(fine_strip.resize((columns, bottom - top), Image.Resampling.BOX))
+    bent_image = Image.fromarray(picture, "RGB")
+    if output_path is not None:
+        bent_image.save(output_path)
+    return bent_image
+
 def make_triangle_art(image_path: str,
                       seed: int,
                       starting_count: int = 120,
@@ -336,6 +433,8 @@ def make_triangle_art(image_path: str,
                       spread: float = 0.2,
                       split_chance: float = 0.7,
                       borrow_chance: float = 0.3,
+                      curve_strength: float = 0.0,
+                      curve_smoothness: float = 0.04,
                       output_path: str | None = None) -> tuple[np.ndarray, np.ndarray, Image.Image]:
     """
     Takes an image path, a seed and the settings for the pipeline, and checks every setting
@@ -344,7 +443,10 @@ def make_triangle_art(image_path: str,
     triangles_to_image, giving the point picking, the recursion and the borrowing each their
     own random stream spawned from the seed. It saves the final picture if an output path is
     given, and returns the triangle corner points, the final triangle colours and the
-    final Pillow image.
+    final Pillow image. With curve_strength above 0 (a share of the longer side, default 0 for
+    straight edges), every edge is bent by a smooth warp from its own random stream, with
+    curve_smoothness setting how wide the bends are; bends are reduced automatically if they
+    would fold a triangle over.
     """
     whole_types = (int, np.integer)
     real_types = (int, float, np.integer, np.floating)
@@ -360,6 +462,12 @@ def make_triangle_art(image_path: str,
     if (isinstance(spread, bool) or not isinstance(spread, real_types)
             or not (np.isfinite(spread) and spread >= 0)):
         raise ValueError("spread must be a finite number of 0 or more")
+    if (isinstance(curve_strength, bool) or not isinstance(curve_strength, real_types)
+            or not (np.isfinite(curve_strength) and curve_strength >= 0)):
+        raise ValueError("curve_strength must be a finite number of 0 or more")
+    if (isinstance(curve_smoothness, bool) or not isinstance(curve_smoothness, real_types)
+            or not (np.isfinite(curve_smoothness) and 0 < curve_smoothness <= 1)):
+        raise ValueError("curve_smoothness must be a number above 0 and at most 1")
     for setting_name, setting_value in (("evenness", evenness),
                                         ("split_chance", split_chance),
                                         ("borrow_chance", borrow_chance)):
@@ -381,7 +489,8 @@ def make_triangle_art(image_path: str,
         raise ValueError("starting_count cannot be larger than the number of pixels")
  
     # One child stream per step, so changing a setting in one step cannot move the draws of another.
-    pick_seed, recursion_seed, borrow_seed = np.random.SeedSequence(seed).spawn(3)
+    # spawn(4) gives the same first three streams as spawn(3), so straight pictures do not change.
+    pick_seed, recursion_seed, borrow_seed, bend_seed = np.random.SeedSequence(seed).spawn(4)
     pick_rng = np.random.default_rng(pick_seed)
     recursion_rng = np.random.default_rng(recursion_seed)
     borrow_rng = np.random.default_rng(borrow_seed)
@@ -399,7 +508,14 @@ def make_triangle_art(image_path: str,
     labelled = triangle_label_array(recursed, edgestrength.shape)
     median_colours = triangle_rgb_by_brightness(labelled, image_array, grey_array, recursed)
     final_colours = borrow_colour(median_colours, image_array, borrow_rng, borrow_chance)
-    final_image = triangles_to_image(recursed, final_colours, edgestrength.shape, output_path)
+    if curve_strength == 0:
+        # Straight edges: no bending work at all, so this costs no extra time.
+        final_image = triangles_to_image(recursed, final_colours, edgestrength.shape, output_path)
+    else:
+        column_offsets, row_offsets, _ = bend_offsets(edgestrength.shape, curve_strength,
+                                                      curve_smoothness, np.random.default_rng(bend_seed))
+        final_image = bent_triangles_to_image(recursed, final_colours, edgestrength.shape,
+                                              column_offsets, row_offsets, output_path)
     return recursed, final_colours, final_image
 
 

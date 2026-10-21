@@ -21,13 +21,14 @@ Everything lives in `main.py`. The steps run in this order:
 11. `triangle_label_array` works out which triangle covers each pixel. For every triangle, it tests whether the centre of each pixel in the triangle's bounding box is inside the triangle or on its edge, and writes the triangle's number into a label array.
 12. `triangle_rgb_by_brightness` sorts all pixels by triangle and then by brightness with one `np.lexsort`, and gives each triangle the colour of its middle pixel. A triangle with no pixels takes the colour at the centre of its three corners.
 13. `borrow_colour` gives each triangle a `borrow_chance` of taking the colour of one random pixel from anywhere in the photo.
-14. `triangles_to_image` looks up each pixel's colour from the label array and returns a Pillow image at the exact size of the photo, saving it if a path is given.
+14. With straight edges, `triangles_to_image` looks up each pixel's colour from the label array and returns a Pillow image at the exact size of the photo, saving it if a path is given.
+15. With `curve_strength` above 0, `bend_offsets` and `bent_triangles_to_image` draw the picture with bent edges instead, as described in the bent edges section.
 
 `triangle_draw` is a separate matplotlib view. It can show the triangle outlines, the outlines over the photo, or the filled triangles, and it returns the figure without calling `plt.show`.
 
 ## The master function
 
-`make_triangle_art` runs the whole pipeline from one call. It takes an image path, a seed, the six settings and an optional output path, and returns the triangles, the final colours and the finished picture. Before any work starts, it checks every setting and the image size, which it reads from the file header only, and raises a ValueError with a plain message for any bad value. The checks are written so that NaN fails them too.
+`make_triangle_art` runs the whole pipeline from one call. It takes an image path, a seed, the eight settings and an optional output path, and returns the triangles, the final colours and the finished picture. Before any work starts, it checks every setting and the image size, which it reads from the file header only, and raises a ValueError with a plain message for any bad value. The checks are written so that NaN fails them too.
 
 The settings and their defaults are:
 
@@ -37,16 +38,26 @@ The settings and their defaults are:
 - `spread` = 0.2, how far from the middle a side can be cut.
 - `split_chance` = 0.7, the starting chance that a triangle splits.
 - `borrow_chance` = 0.3, the chance that a triangle borrows a random photo colour.
+- `curve_strength` = 0.0, how far the edges bend, as a share of the image's longer side. At 0 the edges stay straight.
+- `curve_smoothness` = 0.04, how wide each bend is, also as a share of the longer side.
 
-The seed is turned into three separate random streams with `np.random.SeedSequence(seed).spawn(3)`: one for picking points, one for the recursion and one for borrowing. Because each step has its own stream, changing one setting cannot change the random draws of another step. The same photo, seed and settings always give the same picture.
+The seed is turned into four separate random streams with `np.random.SeedSequence(seed).spawn(4)`: one for picking points, one for the recursion, one for borrowing and one for bending. Because each step has its own stream, changing one setting cannot change the random draws of another step. The same photo, seed and settings always give the same picture. Adding the bending stream did not change the first three streams, so straight pictures are the same as before bending existed.
 
 The testing area at the bottom of `main.py` sits behind `if __name__ == "__main__":`. It makes a picture of bottlebrush with the matplotlib views, then one picture for each of my other photos (ajumma, bird, chairs, goat, nets, poles, retrospace1, rocks and sekiro), saved as `<name>_triangles.png`.
+
+## Bent edges
+
+Bending is a whole-image warp. `bend_offsets` makes two smooth noise fields, one for sideways movement and one for up and down, and each pixel looks up its triangle at a slightly moved position. Because every pixel still belongs to exactly one triangle, two neighbouring triangles always bend their shared edge the same way and no gaps can open. Curving each edge on its own would have needed matching curves on every shared edge, which is hard because the recursion leaves many corners in the middle of a neighbour's side.
+
+The noise is blurred at a smaller size and stretched back up with cubic interpolation, which is much faster than blurring it at full size. The bends fade to 0 near the picture's edges, so the outer border stays straight and does not smear. To keep my rule that no triangle folds over, the function checks the Jacobian determinant of the warp with `np.gradient` and shrinks the bends until the smallest value is at least 0.05. If a strength would fold, it is reduced automatically.
+
+`bent_triangles_to_image` builds the label array at twice the size, bends it, colours it and shrinks every 2 x 2 block back to one pixel with `Image.Resampling.BOX`, so the curved edges come out smooth instead of stair-stepped. Bending is off by default. With `curve_strength` at 0, none of this code runs, so straight pictures take no extra time. In tests at the web app's photo size, a straight picture took about 2 seconds and a bent one about 7 to 9 seconds.
 
 ## The web app
 
 The web app has two files. `picture_service.py` does the work and has no Streamlit code in it, so it can be tested on its own. It reads the seed box (blank means a random seed), writes the upload to a temporary folder, shrinks photos to 3000 px on the longest side after the EXIF rotation, and calls `make_triangle_art`. At most two pictures are made at the same time, and anyone else waits for a free slot. Every problem becomes a plain message, and the temporary folder is deleted when the run ends, so no files are kept.
 
-`streamlit_app.py` is the page itself. It has a photo upload, a seed box and a slider for each setting inside a form, so moving a slider does nothing until Make picture is pressed. The right side shows the picture, the seed used and a Save picture button that downloads `triangles_seed<seed>.png`. Each visitor's session keeps only their latest picture.
+`streamlit_app.py` is the page itself. It has a photo upload, a seed box and a slider for each setting, including the two bending sliders, inside a form, so moving a slider does nothing until Make picture is pressed. The right side shows the picture, the seed used and a Save picture button that downloads `triangles_seed<seed>.png`. Each visitor's session keeps only their latest picture.
 
 The code is on GitHub as RaphaelJakob/Triangle-Visualisation, on the `main` branch, with `requirements.txt` listing streamlit, pillow-heif, numpy (1.25 or newer), scipy, pillow and matplotlib. My photos and their output pictures are kept out of the repo with `.gitignore`, since the repo is public. A separate Gradio version also exists for running on my own computer only, with no public link and no shrinking.
 
@@ -59,6 +70,9 @@ The code is on GitHub as RaphaelJakob/Triangle-Visualisation, on the `main` bran
 - Colours come from the middle pixel by brightness, because the per-channel median gave muddy colours that no pixel in the triangle actually had.
 - Colour borrowing uses one flat chance for every triangle. Borrowing more for small triangles looked worse.
 - Empty triangles take the colour at their centre instead of raising an error.
+- Bending lives in `main.py` as two settings of the master function, so the web app stays a thin wrapper and bent pictures can also be made without the app.
+- Bent pictures use 2x smoothing for clean curved edges, even though it is slower.
+- Bending is off by default, so it does not add time to every picture.
 - The output picture is drawn with Pillow at the photo's exact size, and matplotlib is kept for viewing.
 - For the web app, I picked Streamlit Community Cloud because friends can use it while my computer is off, and a public repo is fine with me. Hugging Face Spaces now needs a paid plan for a Gradio app, and a Gradio share link only works while my computer is on and expires after 72 hours.
 
@@ -68,6 +82,9 @@ The code is on GitHub as RaphaelJakob/Triangle-Visualisation, on the `main` bran
 - Phone photos came out sideways until `ImageOps.exif_transpose` was added, because Pillow and `np.array` ignore the EXIF rotation.
 - The muddy colours were fixed by switching from per-channel medians to the brightness median.
 - Random draws in one step used to depend on the settings of other steps. Giving each step its own stream fixed this.
+- The first bending previews had stair-step edges and colour smears along the border. The 2x smoothing and the fade to 0 near the edges fixed both.
+- Strong bends could fold triangles over. The Jacobian check now shrinks any bend that would fold.
+- The first version of bending added 16 to 26 seconds per picture. Blurring the noise at a smaller size brought the extra time down to about 6 seconds.
 
 ## What I learned
 
@@ -81,10 +98,14 @@ The code is on GitHub as RaphaelJakob/Triangle-Visualisation, on the `main` bran
 - Delaunay's `.simplices` holds the positions of the input points, and `points[simplices]` swaps them for their coordinates.
 - Thinking in whole arrays, instead of looping over one triangle at a time, is fast and turned out to be one of my favourite parts of the project.
 
+## Credits
+
+The splitting rule in this project is based on Tyler Hobbs's article "Aesthetically Pleasing Triangle Subdivision" (https://www.tylerxhobbs.com/words/aesthetically-pleasing-triangle-subdivision). His article describes cutting a triangle's longest side at a point near the middle and repeating the split, which is the idea behind `triangle_split` and `recursion_driver`. His work is purely generative, while this project applies the same kind of split to triangles built from a photo.
+
 ## What I will do next
 
-1. Check the app runs on Streamlit Community Cloud, then ask two or three friends to try it on their phones.
+1. Check the app runs on Streamlit Community Cloud, then ask two or three friends to try it on their phones.    
 2. Run the tests on my own photos, including a rotated phone photo and a HEIC photo, since the checks so far only used stand-in photos.
 3. Fix the docstrings that no longer match the code. `recursion_driver` says 13 rounds but runs up to 21, and `pick_from_probability` still says the default is 60 instead of 120.
-4. Add curved edges with Gaussian noise (default strength 0), then the animation and the credits in the README.
+4. Make the animation, and add the credits to the README.
 5. Look around for more inspiration, and later add black lines between triangles as an optional setting.

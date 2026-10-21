@@ -24,7 +24,8 @@ MAX_SIDE = 3000          # longest side a photo is shrunk to before a run; None 
 MAX_UPLOAD_MB = 25       # largest photo accepted (also set in .streamlit/config.toml)
 RUNS_AT_ONCE = 2         # runs that can happen at the same time; others wait
 DEFAULTS = dict(starting_count=120, weighting_power=2.0, evenness=0.2,
-                spread=0.2, split_chance=0.7, borrow_chance=0.3)
+                spread=0.2, split_chance=0.7, borrow_chance=0.3,
+                curve_strength=0.0, curve_smoothness=0.04)
 
 # One shared set of run slots for everyone using the app. Python imports this module only once
 # per server, so every visitor's session uses the same two slots.
@@ -76,10 +77,11 @@ def prepare_photo(photo_path: str, folder: str) -> str:
 def make_picture(photo_bytes: bytes | None, seed: int | None = None,
                  starting_count: int = 120, weighting_power: float = 2.0,
                  evenness: float = 0.2, spread: float = 0.2,
-                 split_chance: float = 0.7, borrow_chance: float = 0.3) -> tuple[bytes, int]:
+                 split_chance: float = 0.7, borrow_chance: float = 0.3,
+                 curve_strength: float = 0.0, curve_smoothness: float = 0.04) -> tuple[bytes, int]:
     """
-    Takes the uploaded photo's bytes, a seed (None means pick a random one) and the six
-    settings. It writes the photo to a temporary folder, shrinks it if it is big, waits for a
+    Takes the uploaded photo's bytes, a seed (None means pick a random one) and the eight
+    settings (curve_strength 0 means straight edges). It writes the photo to a temporary folder, shrinks it if it is big, waits for a
     free run slot, runs make_triangle_art and reads the picture back as PNG bytes. The folder
     and everything in it is deleted before returning. Returns the PNG bytes and the seed used,
     and raises a PictureError with a plain message for any problem.
@@ -102,7 +104,8 @@ def make_picture(photo_bytes: bytes | None, seed: int | None = None,
             try:
                 used_path = prepare_photo(photo_path, folder)
                 make_triangle_art(used_path, seed, starting_count, weighting_power, evenness,
-                                  spread, split_chance, borrow_chance, output_path=output_path)
+                                  spread, split_chance, borrow_chance, curve_strength,
+                                  curve_smoothness, output_path=output_path)
             except ValueError as error:
                 raise PictureError(f"Setting problem: {error}") from None
             except (UnidentifiedImageError, OSError):
