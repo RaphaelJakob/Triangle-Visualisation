@@ -4,6 +4,8 @@
 
 This project turns a photo into a picture made only of triangles. The idea came from simple rules that give complex results, like the Game of Life and the Mandelbrot set, and the splitting rule follows Tyler Hobbs's "Aesthetically Pleasing Triangle Subdivision". Big triangles are placed where the photo has the most detail, then they are split again and again with a random rule, so the result looks like the photo but also a bit foreign. The code is in Python with NumPy, SciPy, Pillow and matplotlib, and a Streamlit page lets other people use it in a browser.
 
+You can try it online at https://triangle-visualisation.streamlit.app/.
+
 ## How the pipeline works
 
 Everything lives in `main.py`. The steps run in this order:
@@ -98,6 +100,12 @@ The code is on GitHub as RaphaelJakob/Triangle-Visualisation, on the `main` bran
 - Delaunay's `.simplices` holds the positions of the input points, and `points[simplices]` swaps them for their coordinates.
 - Thinking in whole arrays, instead of looping over one triangle at a time, is fast and turned out to be one of my favourite parts of the project.
 
+## How I built it
+
+I wrote the core of the project myself while learning NumPy along the way. This includes loading the photo and fixing its rotation, the greyscale and Sobel edge steps, the edge-weighted point picking, adding the corners, the Delaunay triangulation, the brightness-median colours, the matplotlib view, and the whole recursion (`triangle_split`, `coin_split` and `recursion_driver`). The design decisions listed above are also mine.
+
+Once the core worked, I used Claude, an AI assistant made by Anthropic, to help finish the project. Claude wrote `triangles_to_image`, the fallback colour for empty triangles, `borrow_colour`, the exact version of `triangle_label_array` that fixed the hairlines, the master function `make_triangle_art`, the bending functions, the Streamlit web app and the tests, and helped me decide how to host the app. I reviewed and ran this code, and I am working through each part so that I can explain every line myself.
+
 ## Credits
 
 The splitting rule in this project is based on Tyler Hobbs's article "Aesthetically Pleasing Triangle Subdivision" (https://www.tylerxhobbs.com/words/aesthetically-pleasing-triangle-subdivision). His article describes cutting a triangle's longest side at a point near the middle and repeating the split, which is the idea behind `triangle_split` and `recursion_driver`. His work is purely generative, while this project applies the same kind of split to triangles built from a photo.
@@ -107,5 +115,5 @@ The splitting rule in this project is based on Tyler Hobbs's article "Aesthetica
 1. Check the app runs on Streamlit Community Cloud, then ask two or three friends to try it on their phones.    
 2. Run the tests on my own photos, including a rotated phone photo and a HEIC photo, since the checks so far only used stand-in photos.
 3. Fix the docstrings that no longer match the code. `recursion_driver` says 13 rounds but runs up to 21, and `pick_from_probability` still says the default is 60 instead of 120.
-4. Make the animation, and add the credits to the README.
+4. Make the animation, and add any other credits to the README.
 5. Look around for more inspiration, and later add black lines between triangles as an optional setting.
