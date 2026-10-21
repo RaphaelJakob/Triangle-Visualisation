@@ -66,7 +66,7 @@ def edge_probability(edgestrength_array: np.ndarray,
     return blended_probability_array
 
 def pick_from_probability(probability_array: np.ndarray, rng: np.random.Generator,
-                          starting_count: int = 120) -> np.ndarray:
+                          starting_count: int = 960) -> np.ndarray:
     """
     Takes a 1D probability array with one value per pixel, a NumPy random generator,
     and a starting count that defaults to 120. It uses the generator to pick that many
@@ -429,7 +429,7 @@ def bent_triangles_to_image(triangle_corner_points: np.ndarray,
 
 def make_triangle_art(image_path: str,
                       seed: int,
-                      starting_count: int = 120,
+                      starting_count: int = 960,
                       weighting_power: float = 2.0,
                       evenness: float = 0.2,
                       spread: float = 0.2,

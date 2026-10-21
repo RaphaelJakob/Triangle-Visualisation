@@ -34,7 +34,7 @@ Everything lives in `main.py`. The steps run in this order:
 
 The settings and their defaults are:
 
-- `starting_count` = 120, the number of points picked before the 4 corners.
+- `starting_count` = 960, the number of points picked before the 4 corners.
 - `weighting_power` = 2.0, how strongly the points follow the edges.
 - `evenness` = 0.2, the share of probability spread evenly over all pixels.
 - `spread` = 0.2, how far from the middle a side can be cut.
