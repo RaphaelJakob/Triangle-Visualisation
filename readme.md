@@ -110,10 +110,3 @@ Once the core worked, I used Claude, an AI assistant made by Anthropic, to help 
 
 The splitting rule in this project is based on Tyler Hobbs's article "Aesthetically Pleasing Triangle Subdivision" (https://www.tylerxhobbs.com/words/aesthetically-pleasing-triangle-subdivision). His article describes cutting a triangle's longest side at a point near the middle and repeating the split, which is the idea behind `triangle_split` and `recursion_driver`. His work is purely generative, while this project applies the same kind of split to triangles built from a photo.
 
-## What I will do next
-
-1. Check the app runs on Streamlit Community Cloud, then ask two or three friends to try it on their phones.    
-2. Run the tests on my own photos, including a rotated phone photo and a HEIC photo, since the checks so far only used stand-in photos.
-3. Fix the docstrings that no longer match the code. `recursion_driver` says 13 rounds but runs up to 21, and `pick_from_probability` still says the default is 60 instead of 120.
-4. Make the animation, and add any other credits to the README.
-5. Look around for more inspiration, and later add black lines between triangles as an optional setting.

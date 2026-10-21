@@ -13,6 +13,7 @@ import os
 
 @dataclass
 class TriangleData:
+    """Holds a set of triangle corner points and their picked colours together. Not used by the pipeline yet."""
     triangle_corner_points: np.ndarray
     picked_colors: np.ndarray
 
@@ -68,7 +69,7 @@ def pick_from_probability(probability_array: np.ndarray, rng: np.random.Generato
                           starting_count: int = 120) -> np.ndarray:
     """
     Takes a 1D probability array with one value per pixel, a NumPy random generator,
-    and a starting count that defaults to 60. It uses the generator to pick that many
+    and a starting count that defaults to 120. It uses the generator to pick that many
     different pixel positions, with pixels that have higher probabilities more likely
     to be chosen, and returns the picks as a 1D integer array of positions in the flat list.
     """
@@ -276,7 +277,7 @@ def coin_split(triangle_array: np.ndarray,
     """Takes an array of triangles, a split chance between 0 and 1 and a
     random generator, and draws one whole number from 1 to 100 for each
     triangle. Returns a boolean array with one value per triangle, which is
-    True where the draw is at or below the chance, and raises a ValueError
+    True where the draw is at or below the chance times 100, and raises a ValueError
     if the chance is outside 0 to 1.
     """
     if split_chance < 0 or split_chance > 1:
@@ -290,10 +291,11 @@ def recursion_driver(triangle_corner_points: np.ndarray,
                         spread: float = 0.2,
                         split_chance: float = 0.7,) -> np.ndarray:
     """Takes an array of triangle corner points, a random generator, a spread and a
-    starting split chance, and runs up to 13 rounds in which each triangle still in
-    play flips a coin to be split by triangle_split, with the split chance halved
-    after every round. Returns a (triangles, 3, 2) array holding the triangles that
-    stopped splitting together with those still active when the rounds end.
+    starting split chance, and runs up to 21 rounds, stopping early if no triangle is
+    left in play. In each round every triangle still in play flips a coin to be split
+    by triangle_split, and the split chance is halved after every round. Returns a
+    (triangles, 3, 2) array holding the triangles that stopped splitting together
+    with those still active when the rounds end.
     """
     i = 0
     active_pile = triangle_corner_points
