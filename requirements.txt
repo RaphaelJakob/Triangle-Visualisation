@@ -1,0 +1,6 @@
+streamlit
+pillow-heif
+numpy>=1.25
+scipy
+pillow
+matplotlib
