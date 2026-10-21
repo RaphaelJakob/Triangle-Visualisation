@@ -7,6 +7,7 @@ st.set_page_config(page_title="Triangle art", layout="wide")
 st.title("Triangle art")
 st.write("Upload a photo, pick the settings and press **Make picture**. Leave the seed blank for a "
          "random one. The same photo, seed and settings always give the same picture.")
+st.markdown("[Source code on GitHub](https://github.com/RaphaelJakob/Triangle-Visualisation)")
 
 left, right = st.columns(2)
 
